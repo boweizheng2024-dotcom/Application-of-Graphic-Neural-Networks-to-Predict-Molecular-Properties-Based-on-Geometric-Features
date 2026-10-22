@@ -1,26 +1,16 @@
-# Application of Graphic Neural Networks to Predict Molecular Properties Based on Geometric Features
+# Application of Graph Neural Networks to Predict Molecular Properties Based on Geometric Features
 
-This project compares three message-passing neural network variants for predicting a molecular property from QM9: a feature-only MPNN, a coordinate-input MPNN, and a distance-based invariant (3D) MPNN. The target used in the notebook is the QM9 electric dipole moment.
+This project uses three message passing neural network variants to predict the electric dipole moment of drug-like molecules from QM9 (Quantum Mechanics dataset 9).
 
 ## 1. Dataset
 
 ### QM9 and target
 
-QM9 contains small organic molecules with up to nine heavy atoms. Each molecule is represented as a graph whose nodes are atoms and whose edges encode chemical bonds. The notebook loads 130,831 molecules and selects target index 0, the electric dipole moment (in Debye).
-
-For the experiments, the selected dataset subset is divided by index into:
-
-| Split | Dataset indices | Samples |
-|---|---:|---:|
-| Training | 0–999 | 1,000 |
-| Validation | 1,000–1,999 | 1,000 |
-| Test | 2,000–2,999 | 1,000 |
-
-The batch size is 32. The target values are standardized using the mean and standard deviation computed from the loaded target array. Training minimizes mean squared error on the standardized target; reported MAE is rescaled to the original target units (Debye).
+QM9 contains small organic molecules with up to nine heavy atoms. Each molecule is represented as a graph whose nodes are atoms and whose edges encode chemical bonds. For the experiments, we created dataset splits with 1,000 training, 1,000 validation, 1,000 test samples.
 
 ### Graph representation and initial features
 
-For a molecule with atom set $V$, the node feature matrix is $X\in\mathbb{R}^{|V|\times 11}$. Each atom has 11 features:
+Initially, each atom has 11 features:
 
 1. Five-way one-hot atom type: H, C, N, O, or F.
 2. Atomic number.
@@ -28,9 +18,11 @@ For a molecule with atom set $V$, the node feature matrix is $X\in\mathbb{R}^{|V
 4. Three-way one-hot hybridization: sp, sp², or sp³.
 5. Number of attached hydrogens.
 
-The notebook also retains each atom's atomic number as an auxiliary feature and its 3D position $r_i\in\mathbb{R}^3$.
+The dataset also retains each atom's 3D position, which we will use in the last two MPNN variants.
 
-The edge feature matrix is $E\in\mathbb{R}^{|E|\times 4}$, with a four-way one-hot encoding of bond type: single, double, triple, or aromatic. The graph transform adds every directed pair of distinct atoms, so each molecular graph is complete and has no self-loops. If a pair is not chemically bonded, its edge feature is the all-zero vector; existing chemical bonds retain their bond-type encoding. Thus the graph structure allows messages between every pair of atoms, while edge features distinguish bonded from non-bonded pairs.
+Each edge has a four-way one-hot encoding of bond type: single, double, triple, or aromatic. 
+
+The graph transform adds every directed pair of distinct atoms, so each molecular graph is complete and has no self-loops. If a pair is not chemically bonded, its edge feature is the all-zero vector; existing chemical bonds retain their bond-type encoding.
 
 ## 2. Model Framework
 
