@@ -110,7 +110,7 @@ Distances are unchanged by a global translation or rotation, so the scalar graph
 | Input dimensions | 11 atom features for MPNN and InvariantMPNN; 14 features (11 atom features + 3 coordinates) for CoordMPNN |
 | Edge dimension | 4 bond-type features |
 | Output dimension | 1 scalar per molecule |
-| Message MLP | Concatenated source/destination hidden states and edge features (plus distance for InvariantMPNN); Linear(→64) → BatchNorm → ReLU → Linear(64→64) → BatchNorm → ReLU |
+| Message MLP | Concatenated source/destination states and edge features: Linear(132→64) for MPNN/CoordMPNN or Linear(133→64) when distance is included; each continues with BatchNorm → ReLU → Linear(64→64) → BatchNorm → ReLU |
 | Update MLP | Concatenated current node state and aggregated message; Linear(128→64) → BatchNorm → ReLU → Linear(64→64) → BatchNorm → ReLU |
 | Neighborhood aggregation | Sum |
 | Node residual connection | Add each message-passing layer's output to its input node state |
