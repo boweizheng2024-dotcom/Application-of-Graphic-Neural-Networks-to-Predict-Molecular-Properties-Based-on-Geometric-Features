@@ -98,7 +98,30 @@ Distances are unchanged by a global translation or rotation, so the scalar graph
 
 ## 3. Experimental Results
 
-The notebook trains each model for 100 epochs using Adam (learning rate 0.001), MSE loss on standardized targets, and a ReduceLROnPlateau learning-rate scheduler. Validation MAE is used to track the best checkpoint/epoch. The evaluation metric is **mean absolute error (MAE)**, converted back to Debye.
+### Hyperparameter configuration
+
+| Setting | Configuration |
+|---|---|
+| Dataset split | 1,000 training / 1,000 validation / 1,000 test molecules; split by dataset index |
+| Batch size | 32; training batches are shuffled |
+| Target | QM9 target index 0 (electric dipole moment); standardized with the loaded target mean and standard deviation |
+| Message-passing depth | 4 layers |
+| Hidden dimension | 64 |
+| Input dimensions | 11 atom features for MPNN and InvariantMPNN; 14 features (11 atom features + 3 coordinates) for CoordMPNN |
+| Edge dimension | 4 bond-type features |
+| Output dimension | 1 scalar per molecule |
+| Message MLP | Concatenated source/destination hidden states and edge features (plus distance for InvariantMPNN); Linear(→64) → BatchNorm → ReLU → Linear(64→64) → BatchNorm → ReLU |
+| Update MLP | Concatenated current node state and aggregated message; Linear(128→64) → BatchNorm → ReLU → Linear(64→64) → BatchNorm → ReLU |
+| Neighborhood aggregation | Sum |
+| Node residual connection | Add each message-passing layer's output to its input node state |
+| Graph readout | Global mean pooling, followed by a linear prediction head |
+| Training epochs | 100 |
+| Optimizer | Adam, learning rate 0.001 |
+| Learning-rate scheduler | ReduceLROnPlateau, mode=min, factor=0.9, patience=5, minimum learning rate=0.00001 |
+| Training loss | Mean squared error (MSE) on standardized target values |
+| Evaluation metric | Mean absolute error (MAE), rescaled to Debye |
+
+The validation MAE is used to identify the best-performing epoch. The notebook evaluates the test set whenever validation MAE improves and reports the corresponding test MAE.
 
 | Model | Best validation MAE (Debye) | Test MAE (Debye) |
 |---|---:|---:|
