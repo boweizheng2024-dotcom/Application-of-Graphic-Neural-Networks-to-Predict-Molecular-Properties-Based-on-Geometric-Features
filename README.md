@@ -41,7 +41,7 @@ h_i^{(l+1)}=h_i^{(l)}+
 \phi\left([h_i^{(l)}\,\|\,\bar m_i^{(l)}]\right).
 $$
 
-Here, $m_{ij}^{(l)}$ is the message sent from atom $j$ to atom $i$, and $\bar m_i^{(l)}$ is the sum of messages received by atom $i$. The update adds the MLP output to the previous node state through a residual connection.
+In this equation, $m_{ij}^{(l)}$ is the message sent from atom $j$ to atom $i$, and $\bar m_i^{(l)}$ is the sum of messages received by atom $i$. The update adds the MLP output to the previous node state through a residual connection.
 
 Here $[\cdot\|\cdot]$ denotes concatenation. Both $\psi$ and $\phi$ are two-layer MLPs with Linear, BatchNorm, and ReLU blocks. Initial atom features are projected from 11 dimensions to the 64-dimensional hidden space.
 
