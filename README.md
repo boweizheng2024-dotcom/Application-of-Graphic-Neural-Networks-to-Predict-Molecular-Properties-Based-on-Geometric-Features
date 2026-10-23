@@ -41,7 +41,7 @@ h_i^{(l+1)}=h_i^{(l)}+
 \phi\left([h_i^{(l)}\,\|\,\bar m_i^{(l)}]\right).
 $$
 
-Here, $[\cdot\|\cdot]$ means concatenation. The message function $\psi$ is a two-layer MLP that takes the destination and source node states together with the edge features and produces a message. The update function $\phi$ is also a two-layer MLP; it combines the current node state and the sum of incoming messages. Each MLP uses Linear, BatchNorm, and ReLU blocks. The hidden node state has 64 dimensions, and the initial 11-dimensional atom feature $x_i$ is projected into that hidden space.
+Here, $m_{ij}^{(l)}$ is the message sent from atom $j$ to atom $i$, and $\bar m_i^{(l)}$ is the sum of messages received by atom $i$. The update adds the MLP output to the previous node state through a residual connection.
 
 Here $[\cdot\|\cdot]$ denotes concatenation. Both $\psi$ and $\phi$ are two-layer MLPs with Linear, BatchNorm, and ReLU blocks. Initial atom features are projected from 11 dimensions to the 64-dimensional hidden space.
 
@@ -91,13 +91,14 @@ The rest of message aggregation, node updating, residual connections, and graph 
 | Optimizer and scheduler | Adam, learning rate 0.001; ReduceLROnPlateau (mode=min, factor=0.9, patience=5, minimum learning rate=0.00001) |
 | Objective and metric | MSE loss on standardized targets; MAE reported in Debye |
 
-Validation MAE is used both by the learning-rate scheduler and to select the epoch whose test result is reported. The test MAE shown below corresponds to the epoch with the lowest validation MAE, so it is not necessarily the MAE from the final (100th) epoch. In the notebook, the test set is evaluated whenever validation MAE improves, and the reported value is the test MAE from that selected epoch.
+Validation MAE is used by the learning-rate scheduler and to select the model-selection epoch. The test MAE shown below is the test error measured at the epoch with the best validation MAE; it is **not necessarily the result from the final (100th) epoch**. The notebook evaluates the test set whenever validation MAE improves and reports the test error from the selected epoch. Validation selects the epoch; it does not provide gradients for updating model weights.
+
 | Model | Best validation MAE (Debye) | Test MAE (Debye) |
 |---|---:|---:|
 | Feature-only MPNN (MPNNModel) | 0.7573 | 0.6159 |
 | Coordinate MPNN (CoordMPNNModel) | 0.7896 | 0.6284 |
-| Distance-based invariant MPNN (InvariantMPNNModel) | 0.5348 | 0.5048 |
+| 3D MPNN (InvariantMPNNModel) | 0.5348 | 0.5048 |
 
-On this saved run, the distance-based invariant model has the lowest test MAE. The coordinate-input model is slightly worse than the feature-only baseline, while adding pairwise distances improves the test result.
+On this saved run, the 3D MPNN has the lowest test MAE. The coordinate-input model is slightly worse than the feature-only baseline, while adding pairwise distances improves the test result.
 
 **Reproducibility note:** These values are the outputs saved in the supplied notebook. They are from one indexed 3,000-molecule subset and one training run, so they can vary with initialization and environment. The notebook evaluates the test set whenever validation performance improves and reports the test MAE associated with the best validation epoch.
