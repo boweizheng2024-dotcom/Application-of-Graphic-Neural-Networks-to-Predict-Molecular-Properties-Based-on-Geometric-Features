@@ -6,7 +6,7 @@ This project uses three message passing neural network variants to predict the e
 
 ### QM9 and target
 
-QM9 contains small organic molecules with up to nine heavy atoms. Each molecule is represented as a graph whose nodes are atoms and whose edges encode chemical bonds. For the experiments, we created dataset splits with 1,000 training, 1,000 validation, 1,000 test samples.
+QM9 contains small organic molecules with up to nine heavy atoms. Each molecule is represented as a graph whose nodes are atoms and whose edges encode chemical bonds. To keep the practical experiment quick and make the three models easier to compare, it uses a small subset split equally into 1,000 training, 1,000 validation, and 1,000 test molecules (consecutive dataset slices). For stronger predictive performance, use substantially more of QM9 for training—for example, an 80/10/10 train/validation/test split. A scaffold-based split is especially useful when the goal is to assess generalization to molecular structures whose scaffolds were not seen during training.
 
 ### Graph representation and initial features
 
@@ -26,29 +26,22 @@ The graph transform adds every directed pair of distinct atoms, so each molecula
 
 ## 2. Model Framework
 
-### Shared message-passing and readout
+### Basic MPNN
 
-All three models use 4 message-passing layers with 64 hidden dimensions, residual connections, and a graph-level mean readout. Let $h_i^{(l)}$ be atom $i$'s hidden state at layer $l$, and let $e_{ij}$ be the edge features from atom $j$ to atom $i$.
-
-In the feature-only MPNN, the message function is an MLP over the source and destination states and edge features:
+Let $h_i^{(l)}$ be the hidden state of atom $i$ at layer $l$, and $e_{ij}$ the edge features from atom $j$ to atom $i$. The basic MPNN first computes messages, sums them at each destination atom, and updates the node state with a residual connection:
 
 $$
-m_{ij}^{(l)}=\psi\left([h_i^{(l)}\,\|\,h_j^{(l)}\,\|\,e_{ij}]\right).
-$$
-
-Messages are **summed** over incoming neighbors:
-
-$$
-\bar m_i^{(l)}=\sum_{j\ne i}m_{ij}^{(l)}.
-$$
-
-The update function is another MLP over the current node state and aggregated message. The layer output also has an outer residual connection:
-
-$$
-\tilde h_i^{(l+1)}=\phi\left([h_i^{(l)}\,\|\,\bar m_i^{(l)}]\right),
+m_{ij}^{(l)}=\psi\left([h_i^{(l)}\,\|\,h_j^{(l)}\,\|\,e_{ij}]\right),
 \qquad
-h_i^{(l+1)}=h_i^{(l)}+\tilde h_i^{(l+1)}.
+\bar m_i^{(l)}=\sum_{j\ne i}m_{ij}^{(l)},
 $$
+
+$$
+h_i^{(l+1)}=h_i^{(l)}+
+\phi\left([h_i^{(l)}\,\|\,\bar m_i^{(l)}]\right).
+$$
+
+Here, $[\cdot\|\cdot]$ means concatenation. The message function $\psi$ is a two-layer MLP that takes the destination and source node states together with the edge features and produces a message. The update function $\phi$ is also a two-layer MLP; it combines the current node state and the sum of incoming messages. Each MLP uses Linear, BatchNorm, and ReLU blocks. The hidden node state has 64 dimensions, and the initial 11-dimensional atom feature $x_i$ is projected into that hidden space.
 
 Here $[\cdot\|\cdot]$ denotes concatenation. Both $\psi$ and $\phi$ are two-layer MLPs with Linear, BatchNorm, and ReLU blocks. Initial atom features are projected from 11 dimensions to the 64-dimensional hidden space.
 
@@ -60,61 +53,45 @@ h_G=\frac{1}{|V|}\sum_{i\in V}h_i^{(L)},
 \hat y_G=W_{\mathrm{out}}h_G+b_{\mathrm{out}}.
 $$
 
-### Feature-only MPNN
-
-The baseline uses atom and bond features only. It does not use 3D positions or any geometric quantity. Its message and update equations are the shared equations above.
-
 ### Coordinate MPNN
 
-The coordinate-input model concatenates each atom's three Cartesian coordinates to its 11 atom features before the initial projection:
+Unlike the basic MPNN, this variant concatenates each atom's 3D coordinate $r_i\in\mathbb{R}^3$ to its 11-dimensional atom feature before the initial projection:
 
 $$
 h_i^{(0)}=W_{\mathrm{in}}[x_i\,\|\,r_i]+b_{\mathrm{in}}.
 $$
 
-It then uses the same MPNN message function, sum aggregation, residual update, and mean graph readout as the baseline. Coordinates are input features; this model does not update coordinates or make the output invariant to rotations and translations.
+It then uses the basic MPNN's message, aggregation, update, residual, and graph readout operations. Because it uses absolute Cartesian coordinates, its prediction is not invariant to rotations or translations of the same molecule.
 
-### Distance-based invariant MPNN (3D MPNN)
+### 3D MPNN
 
-The notebook names this model **InvariantMPNNModel**. It keeps the same atom-feature input and shared update/readout design, but augments each edge message with the Euclidean distance between its endpoint atoms:
+Unlike the basic MPNN, the 3D MPNN keeps the initial node input as the 11-dimensional atom feature $x_i$ (it does not concatenate absolute coordinates). Instead, it appends the pairwise Euclidean distance to each message:
 
 $$
 d_{ij}=\|r_i-r_j\|_2,
-$$
-
-$$
+\qquad
 m_{ij}^{(l)}=\psi\left([h_i^{(l)}\,\|\,h_j^{(l)}\,\|\,e_{ij}\,\|\,d_{ij}]\right).
 $$
 
-Distances are unchanged by a global translation or rotation, so the scalar graph prediction is invariant to these transformations. Unlike the coordinate-input model, this variant does not feed absolute coordinate components to the MLP.
+The rest of message aggregation, node updating, residual connections, and graph readout follows the basic MPNN.
+
+**Intuition:** Rotating or translating the coordinate system changes the coordinates $r_i$, but it does not change the distance between any pair of atoms. Using distances therefore lets the model use 3D molecular geometry while keeping its scalar prediction invariant to global rotations and translations. This is useful because the predicted molecular property should not depend on how the same molecule is oriented or positioned in space.
 
 ## 3. Experimental Results
 
 ### Hyperparameter configuration
 
-| Setting | Configuration |
+| Category | Configuration |
 |---|---|
-| Dataset split | 1,000 training / 1,000 validation / 1,000 test molecules; split by dataset index |
-| Batch size | 32; training batches are shuffled |
-| Target | QM9 target index 0 (electric dipole moment); standardized with the loaded target mean and standard deviation |
-| Message-passing depth | 4 layers |
-| Hidden dimension | 64 |
-| Input dimensions | 11 atom features for MPNN and InvariantMPNN; 14 features (11 atom features + 3 coordinates) for CoordMPNN |
-| Edge dimension | 4 bond-type features |
-| Output dimension | 1 scalar per molecule |
-| Message MLP | Concatenated source/destination states and edge features: Linear(132→64) for MPNN/CoordMPNN or Linear(133→64) when distance is included; each continues with BatchNorm → ReLU → Linear(64→64) → BatchNorm → ReLU |
-| Update MLP | Concatenated current node state and aggregated message; Linear(128→64) → BatchNorm → ReLU → Linear(64→64) → BatchNorm → ReLU |
-| Neighborhood aggregation | Sum |
-| Node residual connection | Add each message-passing layer's output to its input node state |
-| Graph readout | Global mean pooling, followed by a linear prediction head |
-| Training epochs | 100 |
-| Optimizer | Adam, learning rate 0.001 |
-| Learning-rate scheduler | ReduceLROnPlateau, mode=min, factor=0.9, patience=5, minimum learning rate=0.00001 |
-| Training loss | Mean squared error (MSE) on standardized target values |
-| Evaluation metric | Mean absolute error (MAE), rescaled to Debye |
+| Data and training | 1,000/1,000/1,000 train/validation/test molecules; batch size 32 (training shuffled); 100 epochs |
+| Model architecture | 4 message-passing layers; hidden dimension 64; input dimension 11 (Basic/3D) or 14 (Coordinate); edge dimension 4; output dimension 1 |
+| Message MLP | Input dimension 132 (Basic/Coordinate) or 133 (3D); Linear → BatchNorm → ReLU → Linear(64→64) → BatchNorm → ReLU |
+| Update MLP | Concatenated node state and aggregated message; Linear(128→64) → BatchNorm → ReLU → Linear(64→64) → BatchNorm → ReLU |
+| Aggregation, residual, readout | Sum aggregation; residual connection after each message-passing layer; global mean pooling followed by a linear prediction head |
+| Optimizer and scheduler | Adam, learning rate 0.001; ReduceLROnPlateau (mode=min, factor=0.9, patience=5, minimum learning rate=0.00001) |
+| Objective and metric | MSE loss on standardized targets; MAE reported in Debye |
 
-The validation MAE is used to identify the best-performing epoch. The notebook evaluates the test set whenever validation MAE improves and reports the corresponding test MAE.
-
+Validation MAE is used both by the learning-rate scheduler and to select the epoch whose test result is reported. The test MAE shown below corresponds to the epoch with the lowest validation MAE, so it is not necessarily the MAE from the final (100th) epoch. In the notebook, the test set is evaluated whenever validation MAE improves, and the reported value is the test MAE from that selected epoch.
 | Model | Best validation MAE (Debye) | Test MAE (Debye) |
 |---|---:|---:|
 | Feature-only MPNN (MPNNModel) | 0.7573 | 0.6159 |
